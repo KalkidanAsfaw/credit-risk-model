@@ -107,7 +107,7 @@ curl -X POST http://localhost:8000/score \
 
 ### How does the Basel II Accord's emphasis on risk measurement influence the need for an interpretable and well-documented model?
 
-The Basel II Capital Accord requires financial institutions to hold capital reserves proportional to the credit risk they carry. To satisfy this requirement, banks must demonstrate to regulators that their risk models are sound, validated, and understood by the people who use them — not just technically accurate. This has three direct implications for model design:
+The Basel II Capital Accord requires financial institutions to hold capital reserves proportional to the credit risk they carry. To satisfy this requirement, banks must demonstrate to regulators that their risk models are sound, validated, and understood by the people who use them, not just technically accurate. This has three direct implications for model design:
 
 **Interpretability is a regulatory obligation, not a nice-to-have.** Basel II's Internal Ratings-Based (IRB) approach mandates that banks be able to explain how a Probability of Default (PD) estimate was produced for any given borrower. A black-box model that produces a score without a traceable path from input features to output probability fails this requirement. Regulators must be able to audit the model, and credit officers must be able to justify a rejection to the applicant. Techniques like Weight of Evidence (WoE) encoding and Logistic Regression are favored in regulated credit scoring precisely because every coefficient has a direct, documentable effect on the output.
 
@@ -180,12 +180,3 @@ Data source: [Xente Challenge — Kaggle](https://www.kaggle.com/datasets/atwine
 | PricingStrategy | Xente merchant pricing category |
 | FraudResult | Fraud flag (1 = fraud, 0 = legitimate) |
 
-## Team
-
-- Kerod
-- Mahbubah
-- Feven
-
-## License
-
-MIT
