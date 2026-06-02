@@ -9,3 +9,7 @@ dist/
 backup/
 interim_report.md
 interim_report.docx
+mlruns/
+mlruns.db
+venv/
+.venv/

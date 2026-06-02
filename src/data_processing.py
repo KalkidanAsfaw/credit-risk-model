@@ -163,10 +163,22 @@ def get_feature_columns() -> list[str]:
 
 
 def prepare_modelling_data(features: pd.DataFrame):
-    X = features[get_feature_columns()].fillna(0)
     # prefer is_high_risk (Task 4) over legacy is_bad
     target_col = "is_high_risk" if "is_high_risk" in features.columns else "is_bad"
     y = features[target_col]
+
+    # Use hardcoded feature list if all columns are present (legacy pipeline),
+    # otherwise fall back to all numeric columns except IDs and target
+    hardcoded = get_feature_columns()
+    if all(c in features.columns for c in hardcoded):
+        X = features[hardcoded].fillna(0)
+    else:
+        exclude = {"AccountId", "CustomerId", "is_high_risk", "is_bad", "cluster"}
+        X = features.select_dtypes(include=[np.number]).drop(
+            columns=[c for c in exclude if c in features.columns],
+            errors="ignore",
+        ).fillna(0)
+
     return X, y
 
 

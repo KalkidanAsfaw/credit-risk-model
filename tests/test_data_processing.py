@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
 
 from src.data_processing import (
     clean_data,
@@ -11,8 +13,10 @@ from src.data_processing import (
     build_transaction_features,
     build_features,
     prepare_modelling_data,
+    get_feature_columns,
 )
 from src.predict import probability_to_score
+from src.train import evaluate, prepare_splits, get_model_configs
 
 
 # ---------------------------------------------------------------------------
@@ -229,3 +233,91 @@ def test_score_monotone_decreasing():
     probs  = [0.1, 0.3, 0.5, 0.7, 0.9]
     scores = [probability_to_score(p) for p in probs]
     assert scores == sorted(scores, reverse=True)
+
+
+# ---------------------------------------------------------------------------
+# Task 5 – Model training helpers
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def binary_dataset(sample_df):
+    """Small clean feature matrix with a binary target for training tests."""
+    df       = clean_data(sample_df)
+    features = build_features(df)
+    X, y     = prepare_modelling_data(features)
+    return X, y
+
+
+def test_evaluate_returns_all_metrics(binary_dataset):
+    """evaluate() must return all five required metric keys."""
+    X, y = binary_dataset
+    clf  = LogisticRegression(max_iter=500, random_state=42)
+    clf.fit(X, y)
+    metrics = evaluate(clf, X, y)
+    assert set(metrics.keys()) == {"accuracy", "precision", "recall", "f1", "roc_auc"}
+
+
+def test_evaluate_metrics_in_range(binary_dataset):
+    """All metric values must be in [0, 1]."""
+    X, y = binary_dataset
+    clf  = DecisionTreeClassifier(random_state=42)
+    clf.fit(X, y)
+    metrics = evaluate(clf, X, y)
+    for name, val in metrics.items():
+        assert 0.0 <= val <= 1.0, f"{name}={val} out of [0,1]"
+
+
+def test_prepare_splits_shapes(sample_df):
+    """Train/test split must be stratified and correctly sized."""
+    df       = clean_data(sample_df)
+    features = build_features(df)
+    X_train, X_test, y_train, y_test = prepare_splits(
+        features, test_size=0.2, use_smote=False
+    )
+    total = len(X_train) + len(X_test)
+    assert len(X_train) == len(y_train)
+    assert len(X_test)  == len(y_test)
+    # test set is approximately 20 % of original (before any SMOTE)
+    assert abs(len(X_test) / total - 0.2) < 0.05
+
+
+def test_prepare_splits_no_nulls(sample_df):
+    """Feature matrices produced by prepare_splits must be null-free."""
+    df       = clean_data(sample_df)
+    features = build_features(df)
+    X_train, X_test, y_train, y_test = prepare_splits(features, use_smote=False)
+    assert X_train.isnull().sum().sum() == 0
+    assert X_test.isnull().sum().sum()  == 0
+
+
+def test_prepare_splits_smote_does_not_reduce_minority(sample_df):
+    """SMOTE must not reduce the minority class count in the training set."""
+    df       = clean_data(sample_df)
+    features = build_features(df)
+
+    X_train_raw, _, y_train_raw, _ = prepare_splits(features, use_smote=False)
+    X_train_sm,  _, y_train_sm,  _ = prepare_splits(features, use_smote=True)
+
+    minority_before = int((y_train_raw == 1).sum())
+    minority_after  = int((y_train_sm  == 1).sum())
+    # SMOTE either increases or keeps the minority count (never reduces it)
+    assert minority_after >= minority_before
+
+
+def test_get_model_configs_returns_four_models():
+    """get_model_configs must return exactly 4 model definitions."""
+    configs = get_model_configs()
+    assert len(configs) == 4
+    names = [c["name"] for c in configs]
+    assert "logistic_regression" in names
+    assert "decision_tree"       in names
+    assert "random_forest"       in names
+    assert "lightgbm"            in names
+
+
+def test_get_feature_columns_no_target():
+    """get_feature_columns must not include target column names."""
+    cols = get_feature_columns()
+    assert "is_high_risk" not in cols
+    assert "is_bad"        not in cols
+    assert len(cols) > 0
