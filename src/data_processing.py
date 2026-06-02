@@ -103,9 +103,9 @@ def build_default_label(
     rfm["cluster"] = kmeans.fit_predict(X)
     summary = rfm.groupby("cluster")[features].mean()
     summary["risk_score"] = (
-        summary["Recency"].rank(ascending=False)
-        + summary["Frequency"].rank(ascending=True)
-        + summary["Monetary"].rank(ascending=True)
+        summary["Recency"].rank(ascending=True)      # high Recency = inactive = risky
+        + summary["Frequency"].rank(ascending=False) # low Frequency = infrequent = risky
+        + summary["Monetary"].rank(ascending=False)  # low Monetary = low spend = risky
     )
     bad_cluster = int(summary["risk_score"].idxmax())
     rfm["is_bad"] = (rfm["cluster"] == bad_cluster).astype(int)
@@ -164,8 +164,122 @@ def get_feature_columns() -> list[str]:
 
 def prepare_modelling_data(features: pd.DataFrame):
     X = features[get_feature_columns()].fillna(0)
-    y = features["is_bad"]
+    # prefer is_high_risk (Task 4) over legacy is_bad
+    target_col = "is_high_risk" if "is_high_risk" in features.columns else "is_bad"
+    y = features[target_col]
     return X, y
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Task 4 – Proxy Target Variable (is_high_risk)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def compute_customer_rfm(
+    df: pd.DataFrame,
+    snapshot_date: pd.Timestamp | None = None,
+) -> pd.DataFrame:
+    """
+    Computes RFM metrics per CustomerId.
+
+    Recency  – days since the customer's most recent transaction
+               (lower = more engaged)
+    Frequency – total number of transactions
+               (higher = more engaged)
+    Monetary  – total spend (sum of Amount)
+               (higher = more engaged)
+
+    Parameters
+    ----------
+    df            : cleaned transaction DataFrame (must contain CustomerId,
+                    TransactionStartTime, TransactionId, Amount)
+    snapshot_date : reference date for Recency; defaults to max date + 1 day
+
+    Returns
+    -------
+    DataFrame with columns: CustomerId, Recency, Frequency, Monetary
+    """
+    if snapshot_date is None:
+        snapshot_date = df["TransactionStartTime"].max() + pd.Timedelta(days=1)
+
+    rfm = (
+        df.groupby("CustomerId")
+        .agg(
+            Recency=(
+                "TransactionStartTime",
+                lambda x: (snapshot_date - x.max()).days,
+            ),
+            Frequency=("TransactionId", "count"),
+            Monetary=("Amount", "sum"),
+        )
+        .reset_index()
+    )
+    return rfm
+
+
+def assign_high_risk_label(
+    rfm: pd.DataFrame,
+    n_clusters: int = 3,
+    random_state: int = 42,
+) -> pd.DataFrame:
+    """
+    Segments customers into 3 clusters using K-Means on scaled RFM features
+    and assigns is_high_risk=1 to the most disengaged cluster.
+
+    High-risk cluster identification
+    ---------------------------------
+    The cluster with the combination of:
+      • highest Recency  (customer has been inactive the longest)
+      • lowest Frequency (customer transacts least often)
+      • lowest Monetary  (customer spends the least)
+    receives is_high_risk=1.  All other customers receive 0.
+
+    Parameters
+    ----------
+    rfm          : DataFrame returned by compute_customer_rfm()
+    n_clusters   : number of K-Means clusters (default 3)
+    random_state : seed for reproducibility (default 42)
+
+    Returns
+    -------
+    DataFrame with columns:
+        CustomerId, Recency, Frequency, Monetary, cluster, is_high_risk
+    """
+    rfm = rfm.copy()
+    features = ["Recency", "Frequency", "Monetary"]
+
+    # Scale before clustering so no single dimension dominates
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(rfm[features])
+
+    kmeans = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=10)
+    rfm["cluster"] = kmeans.fit_predict(X_scaled)
+
+    # Rank each cluster: high Recency + low Frequency + low Monetary = high risk
+    cluster_profiles = rfm.groupby("cluster")[features].mean()
+    cluster_profiles["risk_score"] = (
+        cluster_profiles["Recency"].rank(ascending=True)      # high Recency = inactive = risky
+        + cluster_profiles["Frequency"].rank(ascending=False) # low Frequency = infrequent = risky
+        + cluster_profiles["Monetary"].rank(ascending=False)  # low Monetary = low spend = risky
+    )
+
+    high_risk_cluster = int(cluster_profiles["risk_score"].idxmax())
+    rfm["is_high_risk"] = (rfm["cluster"] == high_risk_cluster).astype(int)
+
+    logger.info(
+        "assign_high_risk_label: cluster %d identified as high-risk "
+        "(Recency=%.1f, Frequency=%.1f, Monetary=%.0f). "
+        "%d / %d customers labelled is_high_risk=1 (%.1f%%)",
+        high_risk_cluster,
+        cluster_profiles.loc[high_risk_cluster, "Recency"],
+        cluster_profiles.loc[high_risk_cluster, "Frequency"],
+        cluster_profiles.loc[high_risk_cluster, "Monetary"],
+        rfm["is_high_risk"].sum(),
+        len(rfm),
+        rfm["is_high_risk"].mean() * 100,
+    )
+
+    return rfm[["CustomerId", "Recency", "Frequency", "Monetary",
+                "cluster", "is_high_risk"]]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -548,28 +662,62 @@ def fit_full_pipeline(
     """
     df_clean = clean_data(df)
 
-    # ── Steps 1–3: transaction → customer-level feature matrix ────────────
+    # ── Steps 1–3: transaction → account-level feature matrix ─────────────
     pipe = build_pipeline(scaling=scaling)
     customer_df = pipe.fit_transform(df_clean)
 
-    # ── Step 3: RFM proxy label ────────────────────────────────────────────
-    rfm_labeled = build_default_label(
-        compute_rfm(df_clean), random_state=random_state
-    )
-    customer_df = customer_df.merge(
-        rfm_labeled[["AccountId", "is_bad"]], on="AccountId", how="left"
-    )
-    customer_df["is_bad"] = customer_df["is_bad"].fillna(0).astype(int)
+    # ── Task 4: RFM proxy label (per CustomerId) ───────────────────────────
+    #
+    # Recency / Frequency / Monetary are computed at the CustomerId level
+    # because one customer may hold several AccountIds.  is_high_risk is then
+    # mapped back to AccountId level via the customer→account bridge:
+    #   • if any CustomerId linked to an AccountId is high-risk, the account
+    #     is flagged (max aggregation).
 
-    # ── Step 4: WoE encoding ───────────────────────────────────────────────
+    rfm_customer = compute_customer_rfm(df_clean)
+    labeled      = assign_high_risk_label(rfm_customer, random_state=random_state)
+
+    # Save the customer-level RFM + label for inspection / audit
+    rfm_output_path = (
+        os.path.join(os.path.dirname(output_path), "rfm_labeled.csv")
+        if output_path else None
+    )
+    if rfm_output_path:
+        out_dir = os.path.dirname(rfm_output_path)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+        labeled.to_csv(rfm_output_path, index=False)
+        logger.info("RFM labels saved to %s", rfm_output_path)
+
+    # Bridge: CustomerId → AccountId  (take most frequent AccountId per customer)
+    cust_to_acct = (
+        df_clean.groupby("CustomerId")["AccountId"]
+        .agg(lambda s: s.mode().iat[0])
+        .reset_index(name="AccountId")
+    )
+    high_risk_per_account = (
+        labeled[["CustomerId", "is_high_risk"]]
+        .merge(cust_to_acct, on="CustomerId", how="left")
+        .groupby("AccountId")["is_high_risk"]
+        .max()                     # flag account if any linked customer is high-risk
+        .reset_index()
+    )
+
+    customer_df = customer_df.merge(
+        high_risk_per_account, on="AccountId", how="left"
+    )
+    customer_df["is_high_risk"] = customer_df["is_high_risk"].fillna(0).astype(int)
+
+    # ── WoE encoding (uses is_high_risk as target) ─────────────────────────
     if use_woe:
+        non_feature = {"AccountId", "is_high_risk", "is_bad"}
         feature_cols = [
             c for c in customer_df.columns
-            if c not in ("AccountId", "is_bad")
+            if c not in non_feature
             and pd.api.types.is_numeric_dtype(customer_df[c])
         ]
         X_num = customer_df[feature_cols]
-        y     = customer_df["is_bad"]
+        y     = customer_df["is_high_risk"]
 
         woe = WoEEncoder(n_bins=10, iv_threshold=0.02)
         woe.fit(X_num, y)
@@ -583,16 +731,17 @@ def fit_full_pipeline(
             )
             logger.info("WoE columns added: %s", woe_cols)
 
-        pipe.woe_encoder_  = woe   # attach for later inference use
-        pipe.iv_report_    = woe.iv_report()
+        pipe.woe_encoder_ = woe
+        pipe.iv_report_   = woe.iv_report()
 
-    # ── Persist ───────────────────────────────────────────────────────────
+    # ── Persist processed dataset ─────────────────────────────────────────
     if output_path:
         out_dir = os.path.dirname(output_path)
         if out_dir:
             os.makedirs(out_dir, exist_ok=True)
         customer_df.to_csv(output_path, index=False)
-        logger.info("Processed dataset saved to %s", output_path)
+        logger.info("Processed dataset saved to %s (%s rows × %s cols)",
+                    output_path, *customer_df.shape)
 
     return pipe, customer_df
 
