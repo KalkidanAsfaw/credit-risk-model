@@ -1,74 +1,114 @@
 """
-FastAPI service exposing the credit risk scoring pipeline.
+FastAPI service — Bati Bank Credit Risk Scoring API.
 
-Endpoints:
-  GET  /health          — liveness check
-  POST /score           — full score for one customer
-  POST /risk-probability — raw P(default) only
+Endpoints
+---------
+GET  /health   — liveness check
+POST /predict  — returns default_probability, credit_score, risk_category
 """
 
 import os
+import logging
 from contextlib import asynccontextmanager
 
+import joblib
+import numpy as np
+import pandas as pd
 from fastapi import FastAPI, HTTPException
 
-from src.api.pydantic_models import CustomerFeatures, ScoreResponse, HealthResponse
-from src.predict import score_customer, predict_risk_proba, probability_to_score
+from src.api.pydantic_models import PredictRequest, PredictResponse, HealthResponse
+from src.predict import probability_to_score
+
+logger = logging.getLogger(__name__)
+
+# ── Model loading ─────────────────────────────────────────────────────────────
+
+MODEL_PATH = os.getenv("MODEL_PATH", "data/processed/risk_model.pkl")
+_model = None
 
 
-MODEL_DIR = os.getenv("MODEL_DIR", "data/processed")
-RISK_MODEL_PATH = os.path.join(MODEL_DIR, "risk_model.pkl")
-AMOUNT_MODEL_PATH = os.path.join(MODEL_DIR, "loan_amount_model.pkl")
-DURATION_MODEL_PATH = os.path.join(MODEL_DIR, "loan_duration_model.pkl")
+def _load_model():
+    """Load the champion model from the local path (saved by src/train.py)."""
+    global _model
+    if _model is None:
+        if not os.path.exists(MODEL_PATH):
+            raise FileNotFoundError(
+                f"Model not found at {MODEL_PATH}. "
+                "Run 'python -m src.train' first."
+            )
+        _model = joblib.load(MODEL_PATH)
+        logger.info("Model loaded from %s", MODEL_PATH)
+    return _model
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Warm up models at startup so first request isn't slow
     try:
-        from src.predict import get_risk_model, get_amount_model, get_duration_model
-        get_risk_model(RISK_MODEL_PATH)
-        get_amount_model(AMOUNT_MODEL_PATH)
-        get_duration_model(DURATION_MODEL_PATH)
-        print("Models loaded successfully.")
-    except FileNotFoundError:
-        print("WARNING: model files not found. Train models before serving requests.")
+        _load_model()
+        logger.info("Model ready.")
+    except FileNotFoundError as exc:
+        logger.warning("Startup warning: %s", exc)
     yield
 
 
+# ── App ───────────────────────────────────────────────────────────────────────
+
 app = FastAPI(
     title="Credit Risk Scoring API",
-    description="Bati Bank — eCommerce credit risk model service",
+    description=(
+        "Bati Bank BNPL credit risk model. "
+        "POST /predict to score a customer and receive a default probability, "
+        "credit score, and risk category."
+    ),
     version="1.0.0",
     lifespan=lifespan,
 )
 
 
-@app.get("/health", response_model=HealthResponse)
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@app.get("/health", response_model=HealthResponse, tags=["ops"])
 def health():
+    """Liveness check — returns 200 OK when the service is up."""
     return {"status": "ok"}
 
 
-@app.post("/score", response_model=ScoreResponse)
-def score(customer: CustomerFeatures):
+@app.post("/predict", response_model=PredictResponse, tags=["scoring"])
+def predict(request: PredictRequest):
+    """
+    Score a single customer.
+
+    Accepts the 39-feature vector produced by the feature engineering pipeline
+    (Tasks 3 & 4) and returns:
+    - **default_probability** — P(is_high_risk) in [0, 1]
+    - **credit_score** — FICO-style score in [300, 850]
+    - **risk_category** — human-readable risk band
+    """
     try:
-        result = score_customer(
-            features=customer.model_dump(),
-        )
+        model = _load_model()
     except FileNotFoundError as exc:
-        raise HTTPException(status_code=503, detail=f"Model not available: {exc}")
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
-    return result
+        raise HTTPException(status_code=503, detail=str(exc))
 
-
-@app.post("/risk-probability")
-def risk_probability(customer: CustomerFeatures):
     try:
-        prob = predict_risk_proba(customer.model_dump(), model_path=RISK_MODEL_PATH)
+        feature_dict = request.model_dump()
+        X = pd.DataFrame([feature_dict])[model.feature_names_in_]
+        prob  = float(model.predict_proba(X)[0, 1])
         score = int(probability_to_score(prob))
-        return {"default_probability": round(float(prob), 4), "credit_score": score}
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=503, detail=f"Model not available: {exc}")
+        return PredictResponse(
+            default_probability=round(prob, 4),
+            credit_score=score,
+            risk_category=_risk_category(score),
+        )
     except Exception as exc:
+        logger.exception("Prediction failed")
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _risk_category(score: int) -> str:
+    if score >= 750: return "Very Low Risk"
+    if score >= 670: return "Low Risk"
+    if score >= 580: return "Medium Risk"
+    if score >= 500: return "High Risk"
+    return "Very High Risk"

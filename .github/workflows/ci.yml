@@ -19,7 +19,10 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt flake8
+
+      - name: Lint with flake8
+        run: flake8 src/ tests/ --max-line-length=120 --ignore=E501,W503
 
       - name: Run tests
         run: PYTHONPATH=. pytest tests/ -v --tb=short
