@@ -11,6 +11,7 @@ interim_report.md
 interim_report.docx
 notebooks/task4_proxy_target.ipynb
 notebooks/task5_model_training.ipynb
+notebooks/task6_deployment.ipynb
 mlruns/
 mlruns.db
 venv/
