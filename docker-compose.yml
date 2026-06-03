@@ -3,10 +3,17 @@ version: "3.9"
 services:
   api:
     build: .
+    container_name: credit-risk-api
     ports:
       - "8000:8000"
     environment:
-      - MODEL_DIR=data/processed
+      - MODEL_PATH=data/processed/risk_model.pkl
+      - PYTHONPATH=/app
     volumes:
       - ./data/processed:/app/data/processed:ro
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

@@ -104,7 +104,7 @@ def build_default_label(
     summary = rfm.groupby("cluster")[features].mean()
     summary["risk_score"] = (
         summary["Recency"].rank(ascending=True)      # high Recency = inactive = risky
-        + summary["Frequency"].rank(ascending=False) # low Frequency = infrequent = risky
+        + summary["Frequency"].rank(ascending=False)  # low Frequency = infrequent = risky
         + summary["Monetary"].rank(ascending=False)  # low Monetary = low spend = risky
     )
     bad_cluster = int(summary["risk_score"].idxmax())
@@ -612,10 +612,14 @@ class WoEEncoder(BaseEstimator, TransformerMixin):
 
 
 def _iv_strength(iv: float) -> str:
-    if iv < 0.02:  return "Useless"
-    if iv < 0.10:  return "Weak"
-    if iv < 0.30:  return "Medium"
-    if iv < 0.50:  return "Strong"
+    if iv < 0.02:
+        return "Useless"
+    if iv < 0.10:
+        return "Weak"
+    if iv < 0.30:
+        return "Medium"
+    if iv < 0.50:
+        return "Strong"
     return "Very Strong"
 
 
