@@ -29,7 +29,6 @@ import joblib
 import mlflow
 import mlflow.sklearn
 import mlflow.lightgbm
-import numpy as np
 import pandas as pd
 from imblearn.over_sampling import SMOTE
 from lightgbm import LGBMClassifier
@@ -53,7 +52,6 @@ from sklearn.ensemble import RandomForestClassifier
 
 from src.data_processing import (
     fit_full_pipeline,
-    get_feature_columns,
     load_data,
     prepare_modelling_data,
 )

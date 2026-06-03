@@ -12,7 +12,6 @@ import logging
 from contextlib import asynccontextmanager
 
 import joblib
-import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 
@@ -107,8 +106,12 @@ def predict(request: PredictRequest):
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _risk_category(score: int) -> str:
-    if score >= 750: return "Very Low Risk"
-    if score >= 670: return "Low Risk"
-    if score >= 580: return "Medium Risk"
-    if score >= 500: return "High Risk"
+    if score >= 750:
+        return "Very Low Risk"
+    if score >= 670:
+        return "Low Risk"
+    if score >= 580:
+        return "Medium Risk"
+    if score >= 500:
+        return "High Risk"
     return "Very High Risk"
