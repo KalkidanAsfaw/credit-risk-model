@@ -1,6 +1,8 @@
 # Credit Risk Probability Model — Bati Bank
 
-An end-to-end credit scoring system built for Bati Bank's buy-now-pay-later partnership with an eCommerce platform. The system transforms raw transaction data into real-time risk probability scores, credit scores, and loan recommendations.
+[![CI](https://github.com/KalkidanAsfaw/credit-risk-model/actions/workflows/ci.yml/badge.svg)](https://github.com/KalkidanAsfaw/credit-risk-model/actions/workflows/ci.yml)
+
+An end-to-end credit scoring system built for Bati Bank's buy-now-pay-later partnership with an eCommerce platform. The system transforms raw transaction data into real-time default probability scores and credit scores.
 
 ## Project Structure
 
@@ -62,30 +64,21 @@ pytest tests/ -v
 
 ## API Usage
 
-**POST /score** — Full scoring for a customer:
+**POST /predict** — Score a customer from their 39-feature vector (produced by the feature engineering pipeline):
 
 ```bash
-curl -X POST http://localhost:8000/score \
+curl -X POST http://localhost:8000/predict \
   -H "Content-Type: application/json" \
   -d '{
-    "Recency": 10,
-    "Frequency": 25,
-    "Monetary": 45000,
-    "total_amount": 45000,
-    "mean_amount": 1800,
-    "std_amount": 400,
-    "max_amount": 5000,
-    "min_amount": 200,
-    "tx_count": 25,
-    "unique_products": 8,
-    "unique_categories": 3,
-    "unique_providers": 4,
-    "unique_channels": 2,
-    "fraud_count": 0,
-    "fraud_rate": 0.0,
-    "hour_std": 3.2,
-    "days_active": 90,
-    "tx_per_day": 0.28
+    "total_amount": 1.2, "mean_amount": 0.5, "std_amount": 0.3,
+    "max_amount": 1.8, "min_amount": -0.2,
+    "tx_count": 12, "unique_products": 3, "unique_categories": 2,
+    "unique_providers": 2, "unique_channels": 1,
+    "fraud_count": 0, "fraud_rate": 0.0,
+    "mean_hour": 14.0, "hour_std": 3.0, "mean_day": 15.0,
+    "mean_month": 6.0, "days_active": 45, "tx_per_day": 0.27,
+    "ProductCategory_enc": 0.0, "ChannelId_enc": 1.0,
+    "ProviderId_enc": 2.0, "PricingStrategy_enc": 1.0
   }'
 ```
 
@@ -95,9 +88,7 @@ curl -X POST http://localhost:8000/score \
 {
   "default_probability": 0.0821,
   "credit_score": 724,
-  "risk_category": "Low Risk",
-  "recommended_amount": 12500.00,
-  "recommended_duration_months": 18
+  "risk_category": "Low Risk"
 }
 ```
 

@@ -16,7 +16,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException
 
 from src.api.pydantic_models import PredictRequest, PredictResponse, HealthResponse
-from src.predict import probability_to_score
+from src.predict import probability_to_score, risk_category
 
 logger = logging.getLogger(__name__)
 
@@ -96,22 +96,8 @@ def predict(request: PredictRequest):
         return PredictResponse(
             default_probability=round(prob, 4),
             credit_score=score,
-            risk_category=_risk_category(score),
+            risk_category=risk_category(score),
         )
     except Exception as exc:
         logger.exception("Prediction failed")
         raise HTTPException(status_code=500, detail=str(exc))
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _risk_category(score: int) -> str:
-    if score >= 750:
-        return "Very Low Risk"
-    if score >= 670:
-        return "Low Risk"
-    if score >= 580:
-        return "Medium Risk"
-    if score >= 500:
-        return "High Risk"
-    return "Very High Risk"
