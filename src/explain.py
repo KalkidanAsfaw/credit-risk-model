@@ -22,6 +22,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import pandas as pd  # noqa: E402
 import shap  # noqa: E402
+from sklearn.base import BaseEstimator  # noqa: E402
 
 from src.train import RANDOM_STATE, TEST_SIZE, load_or_build_features, prepare_splits  # noqa: E402
 
@@ -32,7 +33,7 @@ REPORTS_DIR = "reports"
 SAMPLE_SIZE = 200
 
 
-def compute_shap_values(model, X: pd.DataFrame) -> shap.Explanation:
+def compute_shap_values(model: BaseEstimator, X: pd.DataFrame) -> shap.Explanation:
     """Exact SHAP values for a tree-based model (LightGBM/RandomForest/DecisionTree)."""
     explainer = shap.TreeExplainer(model)
     return explainer(X)

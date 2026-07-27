@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import shap
 import streamlit as st
+from sklearn.base import BaseEstimator
 
 from src.explain import compute_shap_values
 from src.predict import probability_to_score, risk_category
@@ -51,7 +52,7 @@ DISPLAY_COLUMNS = [
 
 
 @st.cache_resource
-def load_model(path: str):
+def load_model(path: str) -> BaseEstimator | None:
     if not os.path.exists(path):
         return None
     return joblib.load(path)
@@ -65,7 +66,7 @@ def load_features(path: str) -> pd.DataFrame | None:
 
 
 @st.cache_data
-def score_portfolio(_model, features: pd.DataFrame) -> pd.DataFrame:
+def score_portfolio(_model: BaseEstimator, features: pd.DataFrame) -> pd.DataFrame:
     X = features[list(_model.feature_names_in_)]
     proba = _model.predict_proba(X)[:, 1]
     scores = probability_to_score(proba)
@@ -77,7 +78,7 @@ def score_portfolio(_model, features: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def plot_portfolio_distribution(scored: pd.DataFrame):
+def plot_portfolio_distribution(scored: pd.DataFrame) -> plt.Figure:
     counts = scored["risk_category"].value_counts().reindex(RISK_ORDER, fill_value=0)
     fig, ax = plt.subplots(figsize=(7, 3.2))
     colors = [RISK_COLORS[c] for c in counts.index]
@@ -96,7 +97,9 @@ def plot_portfolio_distribution(scored: pd.DataFrame):
     return fig
 
 
-def render_customer_panel(model, features: pd.DataFrame, scored: pd.DataFrame, account_id: str) -> None:
+def render_customer_panel(
+    model: BaseEstimator, features: pd.DataFrame, scored: pd.DataFrame, account_id: str
+) -> None:
     row = features[features["AccountId"] == account_id].iloc[0]
     result = scored[scored["AccountId"] == account_id].iloc[0]
     category = result["risk_category"]
