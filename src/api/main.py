@@ -10,13 +10,15 @@ POST /predict  — returns default_probability, credit_score, risk_category
 import os
 import logging
 from contextlib import asynccontextmanager
+from typing import AsyncIterator
 
 import joblib
 import pandas as pd
 from fastapi import FastAPI, HTTPException
+from sklearn.base import BaseEstimator
 
 from src.api.pydantic_models import PredictRequest, PredictResponse, HealthResponse
-from src.predict import probability_to_score
+from src.predict import probability_to_score, risk_category
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +28,7 @@ MODEL_PATH = os.getenv("MODEL_PATH", "data/processed/risk_model.pkl")
 _model = None
 
 
-def _load_model():
+def _load_model() -> BaseEstimator:
     """Load the champion model from the local path (saved by src/train.py)."""
     global _model
     if _model is None:
@@ -41,7 +43,7 @@ def _load_model():
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         _load_model()
         logger.info("Model ready.")
@@ -67,13 +69,13 @@ app = FastAPI(
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.get("/health", response_model=HealthResponse, tags=["ops"])
-def health():
+def health() -> dict[str, str]:
     """Liveness check — returns 200 OK when the service is up."""
     return {"status": "ok"}
 
 
 @app.post("/predict", response_model=PredictResponse, tags=["scoring"])
-def predict(request: PredictRequest):
+def predict(request: PredictRequest) -> PredictResponse:
     """
     Score a single customer.
 
@@ -96,22 +98,8 @@ def predict(request: PredictRequest):
         return PredictResponse(
             default_probability=round(prob, 4),
             credit_score=score,
-            risk_category=_risk_category(score),
+            risk_category=risk_category(score),
         )
     except Exception as exc:
         logger.exception("Prediction failed")
         raise HTTPException(status_code=500, detail=str(exc))
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _risk_category(score: int) -> str:
-    if score >= 750:
-        return "Very Low Risk"
-    if score >= 670:
-        return "Low Risk"
-    if score >= 580:
-        return "Medium Risk"
-    if score >= 500:
-        return "High Risk"
-    return "Very High Risk"

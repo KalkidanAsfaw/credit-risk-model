@@ -24,6 +24,7 @@ import argparse
 import logging
 import os
 import warnings
+from dataclasses import dataclass
 
 import joblib
 import mlflow
@@ -32,6 +33,7 @@ import mlflow.lightgbm
 import pandas as pd
 from imblearn.over_sampling import SMOTE
 from lightgbm import LGBMClassifier
+from sklearn.base import BaseEstimator
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
@@ -60,9 +62,20 @@ warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-RANDOM_STATE = 42
-TEST_SIZE    = 0.2
-CV_FOLDS     = 5
+
+@dataclass(frozen=True)
+class TrainingConfig:
+    """Reproducibility and evaluation-split settings shared across the training pipeline."""
+
+    random_state: int = 42
+    test_size: float = 0.2
+    cv_folds: int = 5
+
+
+CONFIG = TrainingConfig()
+RANDOM_STATE = CONFIG.random_state
+TEST_SIZE    = CONFIG.test_size
+CV_FOLDS     = CONFIG.cv_folds
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -135,7 +148,7 @@ def prepare_splits(
 # Evaluation
 # ─────────────────────────────────────────────────────────────────────────────
 
-def evaluate(model, X_test: pd.DataFrame, y_test: pd.Series) -> dict[str, float]:
+def evaluate(model: BaseEstimator, X_test: pd.DataFrame, y_test: pd.Series) -> dict[str, float]:
     """Returns accuracy, precision, recall, f1, roc_auc."""
     y_pred  = model.predict(X_test)
     y_proba = (

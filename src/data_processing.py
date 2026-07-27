@@ -162,7 +162,7 @@ def get_feature_columns() -> list[str]:
     ]
 
 
-def prepare_modelling_data(features: pd.DataFrame):
+def prepare_modelling_data(features: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     # prefer is_high_risk (Task 4) over legacy is_bad
     target_col = "is_high_risk" if "is_high_risk" in features.columns else "is_bad"
     y = features[target_col]
@@ -309,7 +309,7 @@ class DatetimeFeatureExtractor(BaseEstimator, TransformerMixin):
         tx_year   – calendar year
     """
 
-    def fit(self, X: pd.DataFrame, y=None) -> "DatetimeFeatureExtractor":
+    def fit(self, X: pd.DataFrame, y: pd.Series | None = None) -> "DatetimeFeatureExtractor":
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
@@ -342,7 +342,7 @@ class CustomerFeatureAggregator(BaseEstimator, TransformerMixin):
     def __init__(self) -> None:
         self._label_encoders: dict[str, LabelEncoder] = {}
 
-    def fit(self, X: pd.DataFrame, y=None) -> "CustomerFeatureAggregator":
+    def fit(self, X: pd.DataFrame, y: pd.Series | None = None) -> "CustomerFeatureAggregator":
         # Fit label encoders on the full transaction-level data
         for col in _CATEGORICAL_COLS:
             if col in X.columns:
@@ -463,7 +463,7 @@ class NumericalPreprocessor(BaseEstimator, TransformerMixin):
         self._scaler: StandardScaler | MinMaxScaler | None = None
         self._numeric_cols: list[str] = []
 
-    def fit(self, X: pd.DataFrame, y=None) -> "NumericalPreprocessor":
+    def fit(self, X: pd.DataFrame, y: pd.Series | None = None) -> "NumericalPreprocessor":
         X = pd.DataFrame(X) if not isinstance(X, pd.DataFrame) else X
         self._numeric_cols = X.select_dtypes(include=[np.number]).columns.tolist()
 
