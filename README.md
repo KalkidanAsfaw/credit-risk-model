@@ -21,6 +21,7 @@ credit-risk-model/
 │   ├── train.py                   # Model training & MLflow tracking
 │   ├── predict.py                 # Inference & credit scoring
 │   ├── explain.py                 # SHAP explainability
+│   ├── dashboard.py               # Streamlit dashboard
 │   └── api/
 │       ├── main.py                # FastAPI application
 │       └── pydantic_models.py     # Request/response schemas
@@ -28,7 +29,8 @@ credit-risk-model/
 │   ├── test_data_processing.py    # Unit tests
 │   ├── test_predict.py            # Unit tests
 │   ├── test_api.py                # API integration tests
-│   └── test_explain.py            # Explainability tests
+│   ├── test_explain.py            # Explainability tests
+│   └── test_dashboard.py          # Dashboard tests (Streamlit AppTest)
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
@@ -67,7 +69,13 @@ docker-compose up --build
 python -m src.explain
 ```
 
-### 5. Run tests
+### 5. Run the interactive dashboard
+
+```bash
+streamlit run src/dashboard.py
+```
+
+### 6. Run tests
 
 ```bash
 pytest tests/ -v
@@ -175,6 +183,23 @@ Global and per-prediction SHAP explanations for the LightGBM champion model, gen
 ![Local SHAP waterfall for one customer](reports/shap_waterfall_example.png)
 
 For the highest-predicted-risk customer in the sample, `mean_month` again drives most of the score, with smaller contributions from `hour_std`, `mean_month_woe`, and `days_active`. This is the level of per-customer explanation a credit officer would need to justify a decision to an applicant or a regulator under Basel II's interpretability expectations.
+
+---
+
+## Interactive Dashboard
+
+```bash
+streamlit run src/dashboard.py
+```
+
+A Streamlit app for a credit officer to explore the portfolio and score individual customers, without needing to call the API or read code:
+
+- **Portfolio risk distribution** — where every customer in the current dataset falls across the five risk bands.
+- **Per-customer scoring** — pick a customer, see their default probability, credit score, risk category, a plain-language lending recommendation (approve / manual review / decline), their raw behavior snapshot, and a SHAP waterfall explaining that specific score.
+
+![Portfolio risk distribution](reports/dashboard_portfolio_distribution.png)
+
+Roughly a third of the current portfolio (1,340 of ~3,600 customers) falls into **Very High Risk** — this is a direct consequence of how the `is_high_risk` proxy label was constructed via RFM/K-Means clustering, not a confirmed default rate. The dashboard surfaces this caveat directly under the chart, consistent with the proxy-variable risk disclosure above.
 
 ---
 
