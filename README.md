@@ -201,6 +201,12 @@ A Streamlit app for a credit officer to explore the portfolio and score individu
 
 Roughly a third of the current portfolio (1,340 of ~3,600 customers) falls into **Very High Risk** — this is a direct consequence of how the `is_high_risk` proxy label was constructed via RFM/K-Means clustering, not a confirmed default rate. The dashboard surfaces this caveat directly under the chart, consistent with the proxy-variable risk disclosure above.
 
+**The app itself, running:**
+
+![Dashboard scoring an individual customer](reports/dashboard_screenshot.png)
+
+![SHAP waterfall inside the dashboard](reports/dashboard_shap_screenshot.png)
+
 ---
 
 ## Dataset
