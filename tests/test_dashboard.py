@@ -1,5 +1,6 @@
 import os
 
+import matplotlib.pyplot as plt
 import pytest
 from streamlit.testing.v1 import AppTest
 
@@ -35,6 +36,23 @@ def test_selecting_a_different_customer_updates_the_score():
 
     assert not at.exception
     assert at.metric[1].value != first_customer_score
+
+
+@requires_local_artifacts
+def test_repeated_reruns_do_not_leak_matplotlib_figures():
+    """Regression test: an unclosed portfolio-chart figure previously bled through
+    into the SHAP waterfall plot after a customer switch triggered a rerun.
+    """
+    at = AppTest.from_file(DASHBOARD_PATH)
+    at.run(timeout=60)
+
+    selectbox = at.selectbox[0]
+    for i in range(5):
+        other = selectbox.options[(i * 37) % len(selectbox.options)]
+        selectbox.select(other).run(timeout=60)
+        assert plt.get_fignums() == [], "matplotlib figure leaked across a dashboard rerun"
+
+    assert not at.exception
 
 
 def test_dashboard_shows_error_when_artifacts_missing(monkeypatch):

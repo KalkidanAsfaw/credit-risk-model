@@ -120,6 +120,7 @@ def render_customer_panel(
     st.dataframe(row[DISPLAY_COLUMNS].astype(float).round(2).to_frame("value"))
 
     st.markdown("**Why this score? (SHAP)**")
+    plt.close("all")  # guard against any stale figure (e.g. the portfolio chart) bleeding through
     X_customer = row[list(model.feature_names_in_)].to_frame().T.astype(float)
     shap_values = compute_shap_values(model, X_customer)
     shap.plots.waterfall(shap_values[0], show=False)
@@ -148,7 +149,9 @@ def main() -> None:
     scored = score_portfolio(model, features)
 
     st.subheader("Portfolio risk distribution")
-    st.pyplot(plot_portfolio_distribution(scored))
+    portfolio_fig = plot_portfolio_distribution(scored)
+    st.pyplot(portfolio_fig)
+    plt.close(portfolio_fig)
     st.caption(
         "A large share of the current portfolio falls into Very High Risk — this is a direct "
         "consequence of how the is_high_risk proxy label was constructed from RFM/K-Means "
