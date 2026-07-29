@@ -72,7 +72,7 @@ python -m src.explain
 ### 5. Run the interactive dashboard
 
 ```bash
-streamlit run src/dashboard.py
+PYTHONPATH=. streamlit run src/dashboard.py
 ```
 
 ### 6. Run tests
@@ -189,7 +189,7 @@ For the highest-predicted-risk customer in the sample, `mean_month` again drives
 ## Interactive Dashboard
 
 ```bash
-streamlit run src/dashboard.py
+PYTHONPATH=. streamlit run src/dashboard.py
 ```
 
 A Streamlit app for a credit officer to explore the portfolio and score individual customers, without needing to call the API or read code:
